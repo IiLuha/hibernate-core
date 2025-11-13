@@ -1,11 +1,21 @@
 package com.itdev.listener.operation;
 
 public enum ConsoleOperationType {
-    ACCOUNT_CREATE,
-    SHOW_ALL_USERS,
-    ACCOUNT_CLOSE,
-    ACCOUNT_WITHDRAW,
-    ACCOUNT_DEPOSIT,
-    ACCOUNT_TRANSFER,
-    USER_CREATE
+    ACCOUNT_CREATE("create"),
+    SHOW_ALL_USERS("show"),
+    ACCOUNT_CLOSE("close"),
+    ACCOUNT_WITHDRAW("withdraw"),
+    ACCOUNT_DEPOSIT("deposit"),
+    ACCOUNT_TRANSFER("transfer"),
+    USER_CREATE("create");
+
+    private final String operationName;
+
+    ConsoleOperationType(String operationName) {
+        this.operationName = operationName;
+    }
+
+    public String getOperationName() {
+        return operationName;
+    }
 }

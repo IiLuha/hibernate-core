@@ -1,7 +1,6 @@
 package com.itdev.listener.operation;
 
-import com.itdev.exception.AccountNotFoundException;
-import com.itdev.exception.DeleteFirstAccountException;
+import com.itdev.dto.AccountDto;
 import com.itdev.exception.InsufficientFundsException;
 import com.itdev.listener.ParameterConsoleListener;
 import com.itdev.service.AccountService;
@@ -9,45 +8,33 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.Optional;
-import java.util.Scanner;
 
 @Component
-public class TransferOperation implements OperationCommand {
+public class TransferOperation extends OperationPreparer implements OperationCommand {
 
-    private final ConsoleOperationType consoleOperationType;
-    private final ParameterConsoleListener parameterConsoleListener;
-    private final AccountService accountService;
-
-    public TransferOperation(ParameterConsoleListener parameterConsoleListener, AccountService accountService) {
-        this.parameterConsoleListener = parameterConsoleListener;
-        this.accountService = accountService;
-        this.consoleOperationType = ConsoleOperationType.ACCOUNT_TRANSFER;
+    public TransferOperation(AccountService accountService,
+                             ParameterConsoleListener parameterConsoleListener) {
+        super(accountService, ConsoleOperationType.ACCOUNT_TRANSFER, parameterConsoleListener);
     }
 
     @Override
-    public void execute(Scanner scanner) {
-        System.out.println("Enter source account ID:");
-        Optional<Integer> maybeId = parameterConsoleListener.listenId(scanner);
-        if (maybeId.isEmpty()) return;
-        Integer idFrom = maybeId.get();
+    public void execute() {
+        Optional<AccountDto> maybeAccount = findAccount(ConsoleOperationType.ACCOUNT_WITHDRAW);
+        if (maybeAccount.isEmpty()) return;
+        AccountDto accountFrom = maybeAccount.get();
 
-        System.out.println("Enter target account ID:");
-        maybeId = parameterConsoleListener.listenId(scanner);
-        if (maybeId.isEmpty()) return;
-        Integer idTo = maybeId.get();
+        maybeAccount = findAccount(ConsoleOperationType.ACCOUNT_DEPOSIT);
+        if (maybeAccount.isEmpty()) return;
+        AccountDto accountTo = maybeAccount.get();
 
-        System.out.println("Enter amount to transfer:");
-        Optional<BigDecimal> maybeAmount = parameterConsoleListener.listenAmount(scanner);
+        Optional<BigDecimal> maybeAmount = getAmount();
         if (maybeAmount.isEmpty()) return;
         BigDecimal amount = maybeAmount.get();
 
         try {
-            accountService.transferByIds(idFrom, idTo, amount);
-            System.out.printf("Amount %s transferred from account ID %s to account ID %s.%n", amount, idFrom, idTo);
-        } catch (AccountNotFoundException | DeleteFirstAccountException e) {
-            System.out.println(e.getMessage() +
-                    System.lineSeparator() +
-                    "Try again with another account id.");
+            accountService.transfer(accountFrom.id(), accountTo.id(), amount);
+            System.out.printf("Amount %s transferred from account ID %s to account ID %s.%n",
+                    amount, accountFrom.id(), accountTo.id());
         } catch (InsufficientFundsException e) {
             System.out.println(e.getMessage() +
                     System.lineSeparator() +

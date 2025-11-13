@@ -1,38 +1,31 @@
 package com.itdev.listener.operation;
 
-import com.itdev.exception.AccountNotFoundException;
+import com.itdev.dto.AccountDto;
 import com.itdev.exception.DeleteFirstAccountException;
 import com.itdev.listener.ParameterConsoleListener;
 import com.itdev.service.AccountService;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
-import java.util.Scanner;
 
 @Component
-public class CloseAccountOperation implements OperationCommand {
+public class CloseAccountOperation extends OperationPreparer implements OperationCommand {
 
-    private final ConsoleOperationType consoleOperationType;
-    private final ParameterConsoleListener parameterConsoleListener;
-    private final AccountService accountService;
-
-    public CloseAccountOperation(ParameterConsoleListener parameterConsoleListener, AccountService accountService) {
-        this.parameterConsoleListener = parameterConsoleListener;
-        this.accountService = accountService;
-        this.consoleOperationType = ConsoleOperationType.ACCOUNT_CLOSE;
+    public CloseAccountOperation(AccountService accountService,
+                                 ParameterConsoleListener parameterConsoleListener) {
+        super(accountService, ConsoleOperationType.ACCOUNT_CLOSE, parameterConsoleListener);
     }
 
     @Override
-    public void execute(Scanner scanner) {
-        System.out.println("Enter account ID to close:");
-        Optional<Integer> maybeId = parameterConsoleListener.listenId(scanner);
-        if (maybeId.isEmpty()) return;
-        Integer id = maybeId.get();
+    public void execute() {
+        Optional<AccountDto> maybeAccount = findAccount(consoleOperationType);
+        if (maybeAccount.isEmpty()) return;
+        AccountDto account = maybeAccount.get();
 
         try {
-            accountService.delete(id);
-            System.out.printf("The account with ID %s has been successfully deleted.%n", id);
-        } catch (AccountNotFoundException | DeleteFirstAccountException e) {
+            accountService.delete(account.id());
+            System.out.printf("The account with ID %s has been successfully deleted.%n", account.id());
+        } catch (DeleteFirstAccountException e) {
             System.out.println(e.getMessage() +
                     System.lineSeparator() +
                     "Try again with another account id.");

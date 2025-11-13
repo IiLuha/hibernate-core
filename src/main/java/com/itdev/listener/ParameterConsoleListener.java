@@ -9,12 +9,19 @@ import java.util.Scanner;
 @Component
 public class ParameterConsoleListener {
 
-    public Optional<String> listenLogin(Scanner scanner) {
+    private final Scanner scanner;
+
+    public ParameterConsoleListener(Scanner scanner) {
+        this.scanner = scanner;
+    }
+
+    public Optional<String> listenLogin() {
+        System.out.println("Enter login for new user:");
         if (scanner.hasNext()) return Optional.of(scanner.nextLine());
         return Optional.empty();
     }
 
-    public Optional<Integer> listenId(Scanner scanner) {
+    public Optional<Integer> listenId() {
         Optional<Integer> id;
         if (scanner.hasNext()) {
             String maybeId = scanner.nextLine();
@@ -33,7 +40,7 @@ public class ParameterConsoleListener {
         return Optional.empty();
     }
 
-    public Optional<BigDecimal> listenAmount(Scanner scanner) {
+    public Optional<BigDecimal> listenAmount() {
         Optional<BigDecimal> amount;
         if (scanner.hasNext()) {
             String maybeAmount = scanner.nextLine();

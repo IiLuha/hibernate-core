@@ -26,26 +26,26 @@ public class OperationsConsoleListener {
             """;
 
     private final Map<ConsoleOperationType, OperationCommand> operations;
+    private final Scanner scanner;
 
-    public OperationsConsoleListener(List<OperationCommand> commands) {
+    public OperationsConsoleListener(List<OperationCommand> commands, Scanner scanner) {
+        this.scanner = scanner;
         operations = new HashMap<>();
         commands.forEach(command -> operations.put(command.getOperationType(), command));
     }
 
     public void doListen() {
-        try (Scanner scanner = new Scanner(System.in)) {
-            System.out.println(MAIN_MESSAGE);
-            while (scanner.hasNext()) {
-                String input = scanner.nextLine();
-                Optional<ConsoleOperationType> maybeOperationType = extractOperation(input);
-                if (maybeOperationType.isPresent()) {
-                    OperationCommand operation = operations.get(maybeOperationType.get());
-                    operation.execute(scanner);
-                } else {
-                    System.out.println("Unsupported operation. Try again with the operation from the list.");
-                }
-                System.out.println(MAIN_MESSAGE);
+        System.out.println(MAIN_MESSAGE);
+        while (scanner.hasNext()) {
+            String input = scanner.nextLine();
+            Optional<ConsoleOperationType> maybeOperationType = extractOperation(input);
+            if (maybeOperationType.isPresent()) {
+                OperationCommand operation = operations.get(maybeOperationType.get());
+                operation.execute();
+            } else {
+                System.out.println("Unsupported operation. Try again with the operation from the list.");
             }
+            System.out.println(MAIN_MESSAGE);
         }
     }
 

@@ -1,13 +1,12 @@
 package com.itdev.listener.operation;
 
-import com.itdev.dao.entity.User;
+import com.itdev.dto.UserDto;
 import com.itdev.exception.LoginAlreadyExistException;
 import com.itdev.listener.ParameterConsoleListener;
 import com.itdev.service.UserService;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
-import java.util.Scanner;
 
 @Component
 public class CreateUserOperation implements OperationCommand {
@@ -23,17 +22,17 @@ public class CreateUserOperation implements OperationCommand {
     }
 
     @Override
-    public void execute(Scanner scanner) {
-        System.out.println("Enter login for new user:");
-        Optional<String> maybeLogin = parameterConsoleListener.listenLogin(scanner);
+    public void execute() {
+        Optional<String> maybeLogin = parameterConsoleListener.listenLogin();
         if (maybeLogin.isEmpty()) return;
         String login = maybeLogin.get();
 
         try {
-            User user = userService.create(login);
+            UserDto user = userService.create(login);
             System.out.println("User created: " + user);
         } catch (LoginAlreadyExistException e) {
             System.out.println(e.getMessage() +
+                    System.lineSeparator() +
                     "Try again with another login.");
         }
     }
