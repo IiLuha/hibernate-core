@@ -1,41 +1,48 @@
 package com.itdev.dao.repository;
 
 import com.itdev.dao.entity.User;
-import org.springframework.stereotype.Component;
+import jakarta.persistence.EntityManager;
+import org.hibernate.graph.GraphSemantic;
+import org.springframework.stereotype.Repository;
 
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
 
-@Component
+@Repository
 public class UserRepository {
 
-    private final Set<String> logins;
-    private final Map<Integer, User> users;
+    private final EntityManager entityManager;
 
-    public UserRepository() {
-        this.logins = new HashSet<>();
-        this.users = new HashMap<>();
+    public UserRepository(EntityManager entityManager) {
+        this.entityManager = entityManager;
     }
 
     public User create(User user) {
-        Optional.of(user)
-                .map(u -> {
-                    users.put(u.getId(), u);
-                    return u.getLogin();
-                })
-                .map(logins::add);
+        Optional.of(user).ifPresent(entityManager::persist);
         return user;
     }
 
-    public List<User> findAll() {
-        return users.values().stream().toList();
+    public User saveAnFlush(User user) {
+        Optional.of(user).ifPresent(entityManager::persist);
+        entityManager.flush();
+        return user;
+    }
+
+    public List<User> findAllWithAccounts() {
+        return entityManager.createQuery("select u from User u", User.class)
+                .setHint(GraphSemantic.LOAD.getJakartaHintName(),
+                        entityManager.getEntityGraph("withAccounts"))
+                .getResultList();
     }
 
     public Optional<User> findById(Integer id) {
         return Optional.of(id)
-                .map(users::get);
+                .map(userId -> entityManager.find(User.class, userId));
     }
 
-    public boolean loginNotContained(String login) {
-        return !logins.contains(login);
+    public Optional<User> findByLogin(String maybeUniqueLogin) {
+        return entityManager.createQuery("select u from User u where u.login = :login", User.class)
+                .setParameter("login", maybeUniqueLogin)
+                .getResultStream().findFirst();
     }
 }
