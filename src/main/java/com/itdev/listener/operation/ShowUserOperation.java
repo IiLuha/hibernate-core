@@ -5,7 +5,6 @@ import com.itdev.service.UserService;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Scanner;
 
 @Component
 public class ShowUserOperation implements OperationCommand {
@@ -19,8 +18,8 @@ public class ShowUserOperation implements OperationCommand {
     }
 
     @Override
-    public void execute(Scanner scanner) {
-        List<User> users = userService.findAll();
+    public void execute() {
+        List<User> users = userService.findAllWithAccounts();
         if (users.isEmpty()) {
             System.out.println("There are no users yet.");
         } else {

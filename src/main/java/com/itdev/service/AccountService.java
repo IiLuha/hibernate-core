@@ -4,17 +4,21 @@ import com.itdev.dao.entity.Account;
 import com.itdev.dao.entity.User;
 import com.itdev.dao.repository.AccountRepository;
 import com.itdev.dao.repository.UserRepository;
+import com.itdev.dto.AccountDto;
 import com.itdev.exception.AccountNotFoundException;
 import com.itdev.exception.DeleteFirstAccountException;
 import com.itdev.exception.InsufficientFundsException;
 import com.itdev.exception.UserNotFoundException;
+import com.itdev.mapper.Mapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 @Component
 public class AccountService {
@@ -23,68 +27,87 @@ public class AccountService {
 
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
-    private final IdSequence idSequence;
+    private final TransactionHelper transactionHelper;
+    private final Mapper<Account, AccountDto> accountMapper;
     private final BigDecimal DEFAULT_AMOUNT;
     private final BigDecimal TRANSFER_COMMISSION;
 
     public AccountService(UserRepository userRepository,
                           AccountRepository accountRepository,
-                          IdSequence idSequence,
+                          TransactionHelper transactionHelper,
+                          Mapper<Account, AccountDto> accountMapper,
                           @Value("${account.default-amount}") String DEFAULT_AMOUNT,
                           @Value("${account.transfer-commission}") String transferCommission) {
         this.userRepository = userRepository;
         this.accountRepository = accountRepository;
-        this.idSequence = idSequence;
+        this.transactionHelper = transactionHelper;
+        this.accountMapper = accountMapper;
         this.DEFAULT_AMOUNT = new BigDecimal(DEFAULT_AMOUNT).setScale(2, RoundingMode.HALF_UP);
         this.TRANSFER_COMMISSION = new BigDecimal(transferCommission).setScale(2, RoundingMode.HALF_UP)
                 .divide(ONE_HUNDRED_PERCENT, RoundingMode.HALF_UP);
     }
 
-    public Account getDefaultAcc(Integer userId) {
-        return new Account(idSequence.generateNextId(),
-                userId,
-                DEFAULT_AMOUNT);
+    private Account getDefaultAcc(User user) {
+        return new Account(user, DEFAULT_AMOUNT);
     }
 
-    public Account create(Integer userId) {
+    public AccountDto create(Integer userId) {
         User user = Optional.of(userId)
-                .flatMap(userRepository::findById)
+                .map(uId -> (Supplier<Optional<User>>) () -> userRepository.findById(uId))
+                .flatMap(transactionHelper::executeInTransaction)
                 .orElseThrow(() -> new UserNotFoundException("User with id " + userId + " does not exist."));
-        return Optional.of(getDefaultAcc(userId)).stream()
+        return Optional.of(getDefaultAcc(user)).stream()
                 .peek(user::addAccount)
-                .map(accountRepository::create)
-                .findFirst().orElseThrow();
+                .map(acc -> (Supplier<Account>) () -> accountRepository.create(acc))
+                .map(transactionHelper::executeInTransaction)
+                .findFirst()
+                .map(accountMapper::map).orElseThrow();
     }
 
-    public Account delete(Integer id) {
-        Account account = Optional.of(id)
-                .flatMap(accountRepository::findById)
-                .orElseThrow(() -> new AccountNotFoundException("Account with id " + id + " does not exist."));
-        User user = userRepository.findById(account.getUserId())
-                .orElseThrow(() -> new RuntimeException("User with id " + account.getUserId() + " does not exist."));
+    public void delete(Integer id) {
+        Account account = getAccount(id);
+
+        Integer userId = account.getUser().getId();
+        User user = Optional.of(userId)
+                .map(uId -> (Supplier<Optional<User>>) () -> userRepository.findById(uId))
+                .flatMap(transactionHelper::executeInTransaction)
+                .orElseThrow(() -> new UserNotFoundException("User with id " + userId + " does not exist."));
+
         List<Account> accounts = user.getAccounts();
-        if (accounts.size() == 0) throw new RuntimeException("The account " + id + " is associated with a user " +
+        if (accounts.isEmpty()) throw new RuntimeException("The account " + id + " is associated with a user " +
                 user.getId() + " that does not contain any accounts.");
-        Account firstAccount = accounts.get(0);
+        Account firstAccount = getFirstAccount(accounts);
         if (firstAccount.equals(account)) throw new DeleteFirstAccountException();
-        deposit(firstAccount, account.getMoneyAmount());
-        accounts.remove(account);
-        accountRepository.delete(account);
-        return account;
+        transactionHelper.executeInTransaction(() -> {
+            deposit(firstAccount, account.getMoneyAmount());
+            accounts.remove(account);
+            accountRepository.delete(account);
+        });
     }
 
-    public void transferByIds(Integer idFrom, Integer idTo, BigDecimal amount) {
-        Account accountFrom = Optional.of(idFrom)
-                .flatMap(accountRepository::findById)
-                .orElseThrow(() -> new AccountNotFoundException("Source account with id " + idFrom + " does not exist."));
-        Account accountTo = Optional.of(idTo)
-                .flatMap(accountRepository::findById)
-                .orElseThrow(() -> new AccountNotFoundException("Target account with id " + idTo + " does not exist."));
-        if (accountFrom.getUserId().equals(accountTo.getUserId())) {
+    private Account getFirstAccount(List<Account> accounts) {
+        return accounts.stream()
+                .min(Comparator.comparing(Account::getId))
+                .orElseThrow();
+    }
+
+    public void transfer(Integer idFrom, Integer idTo, BigDecimal amount) {
+        Account accountFrom = Optional.of(idFrom).map(this::getAccount)
+                .orElseThrow(() -> new AccountNotFoundException("Account with id " + idFrom + " does not exist."));
+        Account accountTo = Optional.of(idTo).map(this::getAccount)
+                .orElseThrow(() -> new AccountNotFoundException("Account with id " + idTo + " does not exist."));
+        if (idFrom.equals(idTo)) {
             transferWithoutCommission(accountFrom, accountTo, amount);
         } else {
             transferWithCommission(accountFrom, accountTo, amount);
         }
+    }
+
+    private Account getAccount(Integer id) {
+        return Optional.of(id)
+                .map(accId -> (Supplier<Optional<Account>>) () -> accountRepository.findById(accId))
+                .flatMap(transactionHelper::executeInTransaction)
+                .orElseThrow(() -> new AccountNotFoundException("Account with id " + id + " does not exist."));
     }
 
     private void transferWithoutCommission(Account from, Account to, BigDecimal amount) {
@@ -101,32 +124,51 @@ public class AccountService {
         deposit(to, amountTo);
     }
 
-    public void withdraw(Integer id, BigDecimal amount) {
-        Account account = Optional.of(id)
-                .flatMap(accountRepository::findById)
-                .orElseThrow(() -> new AccountNotFoundException("Account with id " + id + " does not exist."));
-        withdraw(account, amount);
+    public AccountDto withdraw(Integer accountId, BigDecimal amount) {
+        return withdraw(getAccount(accountId), amount);
     }
 
-    private void withdraw(Account account, BigDecimal amount) {
+    private AccountDto withdraw(Account account, BigDecimal amount) {
         BigDecimal accAmount = account.getMoneyAmount();
-        if (accAmount.compareTo(amount) >= 0) {
-            account.setMoneyAmount(accAmount.subtract(amount));
-        } else {
-            throw new InsufficientFundsException(
-                    "There is insufficient funds in account with id %s to process the transaction."
-                            .formatted(account.getId()), accAmount);
-        }
+        Account validAcc = Optional.of(account)
+                .filter(acc -> acc.getMoneyAmount().compareTo(amount) >= 0)
+                .orElseThrow(() -> new InsufficientFundsException(
+                        "There is insufficient funds in account with id %s to process the transaction."
+                                .formatted(account.getId()), accAmount));
+        return Optional.of(amount)
+                .map(validAcc.getMoneyAmount()::subtract)
+                .map(newAmount -> {
+                    validAcc.setMoneyAmount(newAmount);
+                    return validAcc;
+                })
+                .map(acc -> (Supplier<Account>) () -> accountRepository.update(acc))
+                .map(transactionHelper::executeInTransaction)
+                .map(accountMapper::map)
+                .orElseThrow();
     }
 
-    public void deposit(Integer id, BigDecimal amount) {
-        Account account = Optional.of(id)
-                .flatMap(accountRepository::findById)
-                .orElseThrow(() -> new AccountNotFoundException("Account with id " + id + " does not exist."));
-        deposit(account, amount);
+    public Optional<AccountDto> findById(Integer id) {
+        return Optional.of(id)
+                .map(accId -> (Supplier<Optional<Account>>) () -> accountRepository.findById(accId))
+                .flatMap(transactionHelper::executeInTransaction)
+                .map(accountMapper::map);
     }
 
-    private void deposit(Account account, BigDecimal amount) {
-        account.setMoneyAmount(account.getMoneyAmount().add(amount));
+    public AccountDto deposit(Integer accountId, BigDecimal amount) {
+        return Optional.of(accountId)
+                .map(this::getAccount)
+                .map(acc -> deposit(acc, amount))
+                .orElseThrow();
+    }
+
+    private AccountDto deposit(Account account, BigDecimal amount) {
+        return Optional.of(account).stream()
+                .peek(acc -> Optional.of(amount)
+                        .map(acc.getMoneyAmount()::add)
+                        .ifPresent(acc::setMoneyAmount)).findFirst()
+                .map(acc -> (Supplier<Account>) () -> accountRepository.update(acc))
+                .map(transactionHelper::executeInTransaction)
+                .map(accountMapper::map)
+                .orElseThrow();
     }
 }

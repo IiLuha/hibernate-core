@@ -1,48 +1,35 @@
 package com.itdev.listener.operation;
 
-import com.itdev.exception.AccountNotFoundException;
-import com.itdev.exception.DeleteFirstAccountException;
+import com.itdev.dto.AccountDto;
 import com.itdev.listener.ParameterConsoleListener;
 import com.itdev.service.AccountService;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.Optional;
-import java.util.Scanner;
 
 @Component
-public class DepositOperation implements OperationCommand {
+public class DepositOperation extends OperationPreparer implements OperationCommand {
 
-    private final ConsoleOperationType consoleOperationType;
-    private final ParameterConsoleListener parameterConsoleListener;
-    private final AccountService accountService;
-
-    public DepositOperation(ParameterConsoleListener parameterConsoleListener, AccountService accountService) {
-        this.parameterConsoleListener = parameterConsoleListener;
-        this.accountService = accountService;
-        this.consoleOperationType = ConsoleOperationType.ACCOUNT_DEPOSIT;
+    public DepositOperation(AccountService accountService,
+                            ParameterConsoleListener parameterConsoleListener) {
+        super(accountService, ConsoleOperationType.ACCOUNT_DEPOSIT, parameterConsoleListener);
     }
 
     @Override
-    public void execute(Scanner scanner) {
-        System.out.println("Enter account ID:");
-        Optional<Integer> maybeId = parameterConsoleListener.listenId(scanner);
-        if (maybeId.isEmpty()) return;
-        Integer id = maybeId.get();
+    public void execute() {
+        Optional<AccountDto> maybeAccount = findAccount(consoleOperationType);
+        if (maybeAccount.isEmpty()) return;
+        AccountDto accountTo = maybeAccount.get();
 
-        System.out.println("Enter amount to deposit:");
-        Optional<BigDecimal> maybeAmount = parameterConsoleListener.listenAmount(scanner);
+        Optional<BigDecimal> maybeAmount = getAmount();
         if (maybeAmount.isEmpty()) return;
         BigDecimal amount = maybeAmount.get();
 
-        try {
-            accountService.deposit(id, amount);
-            System.out.printf("Amount %s deposited to account ID: %s%n", amount, id);
-        } catch (AccountNotFoundException | DeleteFirstAccountException e) {
-            System.out.println(e.getMessage() +
-                    System.lineSeparator() +
-                    "Try again with another account id.");
-        }
+        AccountDto deposited = accountService.deposit(accountTo.id(), amount);
+        System.out.printf("Amount %s deposited to account ID: %s%n", amount, deposited.id());
+        System.out.printf("There are %s funds available.%n", deposited.moneyAmount());
+
     }
 
     @Override

@@ -1,13 +1,12 @@
 package com.itdev.listener.operation;
 
-import com.itdev.dao.entity.Account;
+import com.itdev.dto.AccountDto;
 import com.itdev.exception.UserNotFoundException;
 import com.itdev.listener.ParameterConsoleListener;
 import com.itdev.service.AccountService;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
-import java.util.Scanner;
 
 @Component
 public class CreateAccountOperation implements OperationCommand {
@@ -23,14 +22,14 @@ public class CreateAccountOperation implements OperationCommand {
     }
 
     @Override
-    public void execute(Scanner scanner) {
+    public void execute() {
         System.out.println("Enter the user id for which to create an account:");
-        Optional<Integer> maybeId = parameterConsoleListener.listenId(scanner);
+        Optional<Integer> maybeId = parameterConsoleListener.listenId();
         if (maybeId.isEmpty()) return;
         Integer id = maybeId.get();
 
         try {
-            Account account = accountService.create(id);
+            AccountDto account = accountService.create(id);
             System.out.println(account + " was created");
         } catch (UserNotFoundException e) {
             System.out.println(e.getMessage() +

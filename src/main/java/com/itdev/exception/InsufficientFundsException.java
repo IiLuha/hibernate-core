@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 
 public class InsufficientFundsException extends RuntimeException {
 
-    private BigDecimal availableFunds;
+    private final BigDecimal availableFunds;
 
     public InsufficientFundsException(String message, BigDecimal availableFunds) {
         super(message);

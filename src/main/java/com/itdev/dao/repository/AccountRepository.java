@@ -1,43 +1,40 @@
 package com.itdev.dao.repository;
 
 import com.itdev.dao.entity.Account;
-import org.springframework.stereotype.Component;
+import jakarta.persistence.EntityManager;
+import org.springframework.stereotype.Repository;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
-@Component
+@Repository
 public class AccountRepository {
 
-    private final Map<Integer, Account> accounts;
+    private final EntityManager entityManager;
 
-    public AccountRepository() {
-        this.accounts = new HashMap<>();
+    public AccountRepository(EntityManager entityManager) {
+        this.entityManager = entityManager;
     }
 
     public Optional<Account> findById(Integer id) {
         return Optional.of(id)
-                .map(accounts::get);
+                .map(accId -> entityManager.find(Account.class, accId));
     }
 
     public Account create(Account account) {
-        return Optional.of(account)
-                .map(this::putAccount)
-                .orElseThrow(() -> new RuntimeException("Unable to create an account with id " + account.getId()));
-    }
-
-    private Account putAccount(Account a) {
-        Account maybePut = accounts.putIfAbsent(a.getId(), a);
-        if (maybePut == null) {
-            return a;
-        } else {
-            return null;
-        }
+        Optional.of(account)
+                .ifPresent(entityManager::persist);
+        return account;
     }
 
     public void delete(Account account) {
-        accounts.remove(account.getId());
+        Optional.of(account)
+                .ifPresent(entityManager::remove);
+    }
+
+    public Account update(Account account) {
+        return Optional.of(account)
+                .map(entityManager::merge)
+                .orElseThrow();
     }
 }
 
